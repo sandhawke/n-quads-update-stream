@@ -23,7 +23,7 @@ Options 1 and 2 require retransmitting the full contents with every change. Opti
 
 We use [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), a very simple streaming HTTP(S) protocol implemented by browsers as [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource).  SSE is [standardized by W3C](https://www.w3.org/TR/eventsource/), maintained as [part of the HTML Living Standard](https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events), [available in non-MS browsers](https://caniuse.com/#search=eventsource), and implemented by [various polyfills](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events#Tools) for older browsers.
 
-This protocol operates in terms of [N-Quads](https://www.w3.org/TR/n-quads/) a very simple W3C standard data serialization format, suitable for graphs as well as datasets include named graphs / quads.  N-Quads is verbose, without including support for prefix expansion, but http-level gzip should solve that.  (For example, see [nginx gzip](http://nginx.org/en/docs/http/ngx_http_gzip_module.html).
+This protocol operates in terms of [N-Quads](https://www.w3.org/TR/n-quads/) a very simple W3C standard data serialization format, suitable for graphs as well as datasets include named graphs / quads.  N-Quads is verbose, without including support for prefix expansion, but http-level gzip should solve that.  (For example, see [nginx gzip](http://nginx.org/en/docs/http/ngx_http_gzip_module.html).)
 
 ## Example
 
@@ -53,7 +53,7 @@ $ curl http://example.org/curtime.nq
 <http://example.org/vocab#Boston> <label> "Boston, Massachusetts".
 ```
 
-Now, the server makes available an n-quads-update-stream of that resource:
+Now, imagine the server makes available an n-quads-update-stream of that resource:
 
 ```
 $ curl http://example.org/curtime.nqupdates
@@ -81,7 +81,8 @@ data: <http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> "2018-
 ^C
 ```
 
-That event stream will continue until interrupted.
+That event stream will continue until interrupted, adding another
+'add' and 'remove' event each second.
 
 ## Event Types
 
@@ -119,7 +120,7 @@ event: remove
 data: _:x * * *
 ```
 
-would remove from the default graph and every named graph any RDF
+would remove (from the default graph and every named graph) any RDF
 statements which have the blank node identified by "_:x" as their
 subject.
 
@@ -127,21 +128,22 @@ subject.
 
 Available for error detection, to confirm the state is correct.
 Checksum should be as it would be on a file containing only the
-non-removed triples, in the order added. N-Quads has some flexibility
+non-removed statements, in the order added. N-Quads has some flexibility
 about newlines; for computing this hash, each statement must be
-treated as followed by exactly one newline (\n, 0x0a).
+treated as followed by exactly one newline (0x0a).
 
 For reference, this can be computed using `openssl dgst -sha256`.
 
 Issue: Are there characters in strings that could be escaped different
-ways? Is unicode norminalization an issue.
+ways? Like, will clients have to remember the form the string arrived
+in?  Is unicode norminalization an issue?
 
 Note that this definition means clients need to remember the order
 quads arrived if they want to check this hash.  If this turns out to
 be burdensome we could define another hash based on quads in a sorted
 order or an XOR of per-quad hashes.
 
-The hash of the empty dataset:
+Example, with the hash of the empty dataset:
 
 ```
 event: check-sha256-hex
@@ -150,7 +152,8 @@ data: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 ### check-count (optional)
 
-Used for error detection, to confirm the state is correct.
+Used for error detection, to confirm the state is correct.  Data is
+decimal represation of the number of quads present.
 
 The count of the empty dataset:
 
