@@ -172,6 +172,8 @@ These header fields MUST be the same as a client would have received doing a GET
 
 Some additional header fields are suggested for use in this context which are not standard.  They will be proposed to IETF if/when they prove somewhat useful:
 
+### Lines
+
 * "Lines" is the count of lines in the current state, for error detection. (This field is already defined, from NNTP, but deprecated.) For example:
 
 ```
@@ -188,6 +190,8 @@ event: update-response-headers
 data: Lines: 1
 ```
 
+### Link rel=self
+
 * "Link" with "rel=self" (originally from [atom](https://tools.ietf.org/html/rfc4287)) is used to indicate the URL by which the Dataset refers to itself, for its metadata.  For example:
 
 ```
@@ -201,6 +205,8 @@ data: <http://example.org/ds1> <http://purl.org/dc/terms/creator> "Alice Example
 Here, the dataset is telling us the name of its creator.
 
 Editor's Note: this use of rel=self needs to be tested and more widely considered.  See [How can you embed metadata in an N-Quads file and have it survive the file being copied/moved/proxied to a different URL?](https://www.quora.com/unanswered/How-can-you-embed-metadata-in-an-N-Quads-file-and-have-it-survive-the-file-being-copied-moved-proxied-to-a-different-URL)
+
+### Version-Integrity
 
 * "Version-Integrity" allows specifying a secure hash of what would be the N-Quads file representing the current state (with any comments removed), computed as per (Subresource Integrity)[https://www.w3.org/TR/SRI/] and [Version Integrity](https://github.com/sandhawke/version-integrity).
 
@@ -222,35 +228,25 @@ data: Version-Integrity: sha256-ejVcS-5rqOG7TXp8VZ7wRKLuLEmbOvp4HyT1YULD1fg=
 
 These strings can be used to make sure changes are being processed properly, and potentially to resume an event string from a given state.
 
-Issue: Are there characters in strings that could be escaped different ways? Like, will clients have to remember the form the string arrived in?  Is unicode norminalization an issue?  Maybe clients should confirm their reserialization of each quad matches the input they parsed, and if they do not match, then remember an exception for this quad.
+Design alternatives:
+* We could assume if the etag looks like a resource-integrity string (starting with "shaNNN"), it is one.  It seems unlikely IETF would like this header, after removing Content-MD5.
+* We could use rel=canonical with a version-integrity URL.
+
+Issue: Are there characters in strings that could be escaped different ways? Like, will clients have to remember the form the string arrived in?  Is unicode norminalization an issue?  Maybe clients should confirm their re-serialization of each quad matches the input they parsed, and if they do not match, then remember an exception for this quad.
 
 ## Blank Nodes
 
 [Blank node
-identifiers](https://www.w3.org/TR/rdf11-concepts/#section-blank-nodes)
-by definition are "locally scoped to the file or RDF store".  In this
-case, the scope is declared to be at least the update stream resource
-and the associated n-quads resource. (The scope may be larger, but
-that issue is out of scope for this specification.)
+identifiers](https://www.w3.org/TR/rdf11-concepts/#section-blank-nodes) by definition are "locally scoped to the file or RDF store".  In this case, the scope is declared to be at least the update stream resource and the associated n-quads resource. (The scope may be larger, but that issue is out of scope for this specification.)
 
-This means: blank node identifers are bound to the same blank nodes
-throughout an entire n-quads-update-stream, as well as every other
-stream obtained from the same stream resource.  In addition, if there
-is an associated n-quads resource, the same blank node identifiers
-apply there.
+This means: blank node identifers are bound to the same blank nodes throughout an entire n-quads-update-stream, as well as every other stream obtained from the same stream resource.  In addition, if there is an associated n-quads resource, the same blank node identifiers apply there.
 
-Once a blank node no longer appears in any quads, it does not matter
-if readers and/or writers remember or reuse the identifier.
+Once a blank node no longer appears in any quads, it does not matter if readers and/or writers remember or reuse the identifier.
 
 ## Finding the update stream
 
-Given the URL of some RDF resource, how do you find the
-n-quads-update-stream for it?
+Given the URL of some RDF resource, how do you find the n-quads-update-stream for it?
 
-TBD.  For now, try suffix .nqupdates.  More clean architecture would
-use "link rel", with some new relation.  Another option is metadata
-within the RDF.
+TBD.  For now, try suffix .nqupdates.  More clean architecture would use "link rel", with some new relation.  Another option is metadata within the RDF.
 
-Unfortunately, we can't use content negotiation because SSE mandates
-"text/event-stream", and there's no reason to think this will be the
-only update stream format for RDF dataset resources.
+Unfortunately, we can't use content negotiation because SSE mandates "text/event-stream", and there's no reason to think this will be the only update stream format for RDF dataset resources.
