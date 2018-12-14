@@ -158,7 +158,7 @@ As a special case, the keyword "end" stands for the highest current index.
 
 ### update-response-headers (optional)
 
-This allows the server to inform the client about various metadata it would have gotten during a GET of the N-Quads file. It can be used at the start, to provide metadata that's doesn't apply to the event stream, and also as data changes.
+This allows the server to inform the client about various metadata it would have gotten during a GET of the N-Quads file. It can be used at the start, to provide metadata that's doesn't apply to the event stream, and also as data changes.  Servers MAY send these events, and clients MAY ignore them, if sent.
 
 For example:
 
@@ -172,7 +172,7 @@ These header fields MUST be the same as a client would have received doing a GET
 
 Some additional header fields are suggested for use in this context which are not standard.  They will be proposed to IETF if/when they prove somewhat useful:
 
-### Lines
+#### Lines
 
 * "Lines" is the count of lines in the current state, for error detection. (This field is already defined, from NNTP, but deprecated.) For example:
 
@@ -190,7 +190,7 @@ event: update-response-headers
 data: Lines: 1
 ```
 
-### Link rel=self
+#### Link rel=self
 
 * "Link" with "rel=self" (originally from [atom](https://tools.ietf.org/html/rfc4287)) is used to indicate the URL by which the Dataset refers to itself, for its metadata.  For example:
 
@@ -206,7 +206,7 @@ Here, the dataset is telling us the name of its creator.
 
 Editor's Note: this use of rel=self needs to be tested and more widely considered.  See [How can you embed metadata in an N-Quads file and have it survive the file being copied/moved/proxied to a different URL?](https://www.quora.com/unanswered/How-can-you-embed-metadata-in-an-N-Quads-file-and-have-it-survive-the-file-being-copied-moved-proxied-to-a-different-URL)
 
-### Version-Integrity
+#### Version-Integrity
 
 * "Version-Integrity" allows specifying a secure hash of what would be the N-Quads file representing the current state (with any comments removed), computed as per (Subresource Integrity)[https://www.w3.org/TR/SRI/] and [Version Integrity](https://github.com/sandhawke/version-integrity).
 
