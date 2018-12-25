@@ -18,12 +18,12 @@ Some general design options:
 
 * For getting rapid change propagation while working in the browser, we need a "server push" technology.  The main options are [Long Poll](https://en.wikipedia.org/wiki/Push_technology#Long_polling), [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and [WebSockets](https://en.wikipedia.org/wiki/WebSocket).  At this point, Long Poll appears to be obsolete due to SSE and WebSockets. Since this application only requires one-pay communication, SSE seems like the best option.
 
-SSE is a very simple streaming HTTP(S) protocol, implementable with a few lines of server code, and [supported](https://caniuse.com/#search=eventsource) all modern browsers (except Edge) as [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource).  ([Polyfills](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events#Tools) exist for Edge and older browsers.)  It was [standardized by W3C](https://www.w3.org/TR/eventsource/) and is now maintained as [part of the HTML Living Standard](https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events).
+SSE is a very simple streaming HTTP(S) protocol, implementable with a few lines of server code, and [supported](https://caniuse.com/#search=eventsource) in all modern browsers (except Edge) as [EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource).  ([Polyfills](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events#Tools) exist for Edge and older browsers.)  It was [standardized by W3C](https://www.w3.org/TR/eventsource/) and is now maintained as [part of the HTML Living Standard](https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events).
 
 On the question of what to send:
 
 * [Linked Data Patch Format](https://www.w3.org/TR/ldpatch/) and [the Delta Ontology](https://www.w3.org/DesignIssues/Diff) are unnecessarily complicated, having many additional features.
-* [TurtlePatch](https://www.w3.org/2001/sw/wiki/TurtlePatch) and [RDF Patch](https://afs.github.io/rdf-patch/) are much simpler, if we want to simple package general RDF Dataset patch format in an SSE event stream.
+* [TurtlePatch](https://www.w3.org/2001/sw/wiki/TurtlePatch) and [RDF Patch](https://afs.github.io/rdf-patch/) are much simpler, if we want to simply package general RDF Dataset patch format in an SSE event stream.
 * [JSON Patch](http://jsonpatch.com/) could be used to send updates to some JSON-like model of the Dataset, such as one of the forms of JSON-LD. It would require agreeing on a canonical JSON form, and understanding how changes to that JSON structure should impact the dataset's internal representation.  This also seems more complicated than necessary.
 * A text-based patch format could be used, like unix diffs, or [jpatch](https://www.npmjs.com/package/jpatch), but this requires keeping the text around on the client, and either very clever algorithms or full re-parsing with every change
 
@@ -34,7 +34,7 @@ The selected design is (like RDF Patch) based on [N-Quads](https://www.w3.org/TR
 To signal the addition of lines (each representing a triple/quad), we can simply use an event-stream like this:
 
 ```
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#label> "Boston, Massachusetts".
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#population> "625000"^^<http://www.w3.org/2001/XMLSchema#integer>.
 ```
@@ -47,10 +47,10 @@ There are some design options for how to remove lines.
 The current design goes with the last option, index numbers, counting from zero.  So, to change the boston population from 625000 to 685000, we could send these two events:
 
 ```
-event: remove-lines
+event: line-remove
 data: 1
 
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#population> "685000"^^<http://www.w3.org/2001/XMLSchema#integer>.
 ```
 
@@ -85,26 +85,26 @@ Now, imagine the server makes available an n-quads-update-stream of that resourc
 
 ```
 $ curl http://example.org/curtime.nqupdates
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> "2018-12-13T13:16:40-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#label> "Boston, Massachusetts".
 
-event: remove-lines
-<http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> *
+event: line-remove
+data: 0
 
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> "2018-12-13T13:16:41-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>
 
-event: remove-lines
-<http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> *
+event: line-remove
+data: 0
 
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> "2018-12-13T13:16:42-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>
 
-event: remove-lines
-<http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> *
+event: line-remove
+data: 0
 
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> "2018-12-13T13:16:43-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>
 ^C
 ```
@@ -113,40 +113,45 @@ That event stream will continue until interrupted, adding another 'add' and 'rem
 
 ## Event Types
 
-### add-lines
+### line-add
 
 Add quads.  Each "data" element is an N-Quads line (aka an N-Quads statement).
 
-N-Quads comments, text starting with '#' outside of a term, MUST be ignored, and like blank lines, they do not count for the index (which is counting quads, not lines).  Comments MUST NOT be included in a content-hash, which means N-Quads documents which include comments cannot have their hashes computed by generic text tools.
+Note that N-Quads lines can be blank, can be comment lines, and can include comments after a quad.  This means consumers cannot just track the quads; they need to also track the lines without quads in order to correctly find lines to remove in handling line-remove events.  
 
-Each line must end with a period (alas). 
+Maybe we have an array corresponding to the lines, where the entry is
+* a quad (interally just a pointer)
+* a string, for comment lines or blank lines
+* an object or array with both, for lines which for some reason don't serialize back to how they came in, eg because of a comment on the line.
+
+Each line must end with a period (alas).   (This is before the comment, if there is a comment.)   Comments at the end of a line are annoyingly complicated!
 
 For example:
 
 ```
-event: add-lines
+event: line-add
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#timeIs> "2018-12-13T13:16:40-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTimeStamp>.
 data: <http://example.org/vocab#Boston> <http://example.org/vocab#label> "Boston, Massachusetts".
 ```
 
-### remove-lines
+### line-remove
 
 Each "data" element is either a decimal index number of a quad in the current store to remove, or a hyphenated pair of two such numbers, which means to remove both of them, and every quad in between.
 
 For example:
 
 ```
-event: remove-lines
+event: line-remove
 data: 3-6
 ```
 
-means to remove the 4th, 5th, 6th, and 7th quads from the current
+means to remove the 4th, 5th, 6th, and 7th lines from the current
 list, considering all adds and removes up until this point.
 
 A single remove even may have multiple such numbers and ranges, separated by a newline, like this:
 
 ```
-event: remove-lines
+event: line-remove
 data: 3-6
 data: 9
 data: 0
@@ -154,11 +159,18 @@ data: 0
 
 Each line is processed in order, so the deletion of the first element, at the end, does not affect the numbering of the earlier entries.
 
-As a special case, the keyword "end" stands for the highest current index.
+As a special case, the keyword "end" stands for the highest current index, so this:
+
+```
+event: line-remove
+data: 0-end
+```
+
+resets the line list to empty.
 
 ### update-response-headers (optional)
 
-This allows the server to inform the client about various metadata it would have gotten during a GET of the N-Quads file. It can be used at the start, to provide metadata that's doesn't apply to the event stream, and also as data changes.  Servers MAY send these events, and clients MAY ignore them, if sent.
+This allows the server to inform the client about various metadata it would have gotten during a GET of the N-Quads file. It can be used at the start, to provide metadata that doesn't apply to the event stream, and also as data changes.  Servers MAY send these events, and clients MAY ignore them, if sent.
 
 For example:
 
@@ -170,20 +182,20 @@ data: etag: "8809-57cbcb4c41b00;89-3f26bd17a2f00"
 
 These header fields MUST be the same as a client would have received doing a GET on the associated N-Quads resource at approximately the same point in time.
 
-Some additional header fields are suggested for use in this context which are not standard.  They will be proposed to IETF if/when they prove somewhat useful:
+Some additional header fields are suggested for use in this context which are not standard.  They will be proposed to IETF if they prove useful:
 
 #### Lines
 
 * "Lines" is the count of lines in the current state, for error detection. (This field is already defined, from NNTP, but deprecated.) For example:
 
 ```
-event: remove-lines
+event: line-remove
 data: 0-end
 
 event: update-response-headers
 data: Lines: 0
 
-event: add-lines
+event: line-add
 data: <https://example.org/#a> <https://example.org/#b> <https://example.org/#c>.
 
 event: update-response-headers
@@ -198,7 +210,7 @@ data: Lines: 1
 event: update-response-headers
 data: Link: <http://example.org/ds1>; rel=self
 
-event: add-lines
+event: line-add
 data: <http://example.org/ds1> <http://purl.org/dc/terms/creator> "Alice Example".
 ```
 
@@ -208,18 +220,18 @@ Editor's Note: this use of rel=self needs to be tested and more widely considere
 
 #### Version-Integrity
 
-* "Version-Integrity" allows specifying a secure hash of what would be the N-Quads file representing the current state (with any comments removed), computed as per (Subresource Integrity)[https://www.w3.org/TR/SRI/] and [Version Integrity](https://github.com/sandhawke/version-integrity).
+* "Version-Integrity" allows specifying a secure hash of what would be the N-Quads file representing the current state, computed as per (Subresource Integrity)[https://www.w3.org/TR/SRI/] and [Version Integrity](https://github.com/sandhawke/version-integrity).  Comparison should be done such that either base64 or base64url encoding can be used.
 
 For example:
 
 ```
-event: remove-lines
+event: line-remove
 data: 0-end
 
 event: update-response-headers
 data: Version-Integrity: sha256-47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU=
 
-event: add-lines
+event: line-add
 data: <https://example.org/#a> <https://example.org/#b> <https://example.org/#c>.
 
 event: update-response-headers
@@ -232,21 +244,27 @@ Design alternatives:
 * We could assume if the etag looks like a resource-integrity string (starting with "shaNNN"), it is one.  It seems unlikely IETF would like this header, after removing Content-MD5.
 * We could use rel=canonical with a version-integrity URL.
 
-Issue: Are there characters in strings that could be escaped different ways? Like, will clients have to remember the form the string arrived in?  Is unicode norminalization an issue?  Maybe clients should confirm their re-serialization of each quad matches the input they parsed, and if they do not match, then remember an exception for this quad.
-
 ## Blank Nodes
 
-[Blank node
-identifiers](https://www.w3.org/TR/rdf11-concepts/#section-blank-nodes) by definition are "locally scoped to the file or RDF store".  In this case, the scope is declared to be at least the update stream resource and the associated n-quads resource. (The scope may be larger, but that issue is out of scope for this specification.)
+[Blank node identifiers](https://www.w3.org/TR/rdf11-concepts/#section-blank-nodes) by definition are "locally scoped to the file or RDF store".  In this case, the scope is declared to be at least the update stream resource and the associated n-quads resource. (The scope may be larger, but that issue is out of scope for this specification.)
 
 This means: blank node identifers are bound to the same blank nodes throughout an entire n-quads-update-stream, as well as every other stream obtained from the same stream resource.  In addition, if there is an associated n-quads resource, the same blank node identifiers apply there.
 
-Once a blank node no longer appears in any quads, it does not matter if readers and/or writers remember or reuse the identifier.
+Once a blank node no longer appears in any quads in this scope, it does not matter if readers and/or writers remember or reuse the identifier.
 
 ## Finding the update stream
 
 Given the URL of some RDF resource, how do you find the n-quads-update-stream for it?
 
-TBD.  For now, try suffix .nqupdates.  More clean architecture would use "link rel", with some new relation.  Another option is metadata within the RDF.
+When doing a GET or HEAD on the n-quads resource, with 'Accept: application/n-quads' (and maybe other types as well).  If the response is application/n-quads, looke for this header:
+
+```
+Link: <someurl>; rel=update-stream
+```
+
+If present, this means <someurl> is an n-quads-update-stream resource. This can be found in the browser after an AJAX call with req.getAllResponseHeaders().
+
+We could also allow it to be in the content, with rel=n-quads-update-stream
 
 Unfortunately, we can't use content negotiation because SSE mandates "text/event-stream", and there's no reason to think this will be the only update stream format for RDF dataset resources.
+
